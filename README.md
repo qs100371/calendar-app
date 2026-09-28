@@ -19,8 +19,10 @@ python app.py
 
 ### Docker 运行
 
-# 修改 docker-compose.yml 中的 SECRET_KEY
+修改 docker-compose.yml中的 SECRET_KEY
 python -c "import secrets; print(secrets.token_hex(32))"
-粘贴进docker-compose.yml
+生成的字符串粘贴到SECRET_KEY，不要引号
+
+\`\`\`
 docker compose up -d
 \`\`\`
