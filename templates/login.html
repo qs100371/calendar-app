@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 · 日程管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #202020;
+        }
+        .login-card {
+            width: 360px;
+            background: #2d2d2d;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .login-card h1 {
+            font-size: 1.6rem;
+            margin-bottom: 6px;
+        }
+        .login-card .subtitle {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 24px;
+        }
+        .login-card label {
+            display: block;
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-top: 14px;
+            margin-bottom: 4px;
+        }
+        .login-card input {
+            width: 100%;
+            padding: 10px;
+            background: #3a3a3a;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 4px;
+            outline: none;
+            font-size: 0.95rem;
+        }
+        .login-card input:focus {
+            border-color: #0078d4;
+        }
+        .login-card button {
+            width: 100%;
+            padding: 10px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+            font-size: 0.95rem;
+        }
+        .login-card button:hover { background: #1884e8; }
+        .login-card .switch {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        .login-card .switch a {
+            color: #0078d4;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .error-msg {
+            color: #ff6b6b;
+            font-size: 0.85rem;
+            margin-top: 12px;
+            min-height: 18px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #444;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            cursor: pointer;
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+        .tab.active {
+            color: white;
+            border-bottom: 2px solid #0078d4;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>日程管理</h1>
+        <div class="subtitle">请登录或注册新账号</div>
+
+        <div class="tabs">
+            <div class="tab active" id="tabLogin" onclick="switchTab('login')">登录</div>
+            <div class="tab" id="tabRegister" onclick="switchTab('register')">注册</div>
+        </div>
+
+        <div id="formLogin">
+            <label>用户名</label>
+            <input type="text" id="loginUsername" autocomplete="username">
+            <label>密码</label>
+            <input type="password" id="loginPassword" autocomplete="current-password">
+            <button onclick="doLogin()">登录</button>
+        </div>
+
+        <div id="formRegister" style="display:none;">
+            <label>用户名（2-20 字符）</label>
+            <input type="text" id="regUsername" autocomplete="username">
+            <label>密码（至少 4 位）</label>
+            <input type="password" id="regPassword" autocomplete="new-password">
+            <button onclick="doRegister()">注册</button>
+            <p style="font-size:0.75rem; color:#888; margin-top:10px;">
+                第一个注册的账号将自动成为管理员。
+            </p>
+        </div>
+
+        <div class="error-msg" id="errMsg"></div>
+    </div>
+
+    <script>
+        function switchTab(which) {
+            document.getElementById('tabLogin').classList.toggle('active', which === 'login');
+            document.getElementById('tabRegister').classList.toggle('active', which === 'register');
+            document.getElementById('formLogin').style.display = which === 'login' ? 'block' : 'none';
+            document.getElementById('formRegister').style.display = which === 'register' ? 'block' : 'none';
+            document.getElementById('errMsg').textContent = '';
+        }
+
+        function showErr(msg) {
+            document.getElementById('errMsg').textContent = msg;
+        }
+
+        function doLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            if (!username || !password) { showErr('请输入用户名和密码'); return; }
+            fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'ok') {
+                    window.location.href = '/';
+                } else {
+                    showErr(data.error || '登录失败');
+                }
+            });
+        }
+
+        function doRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            if (!username || !password) { showErr('请输入用户名和密码'); return; }
+            fetch('/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'ok') {
+                    alert(data.is_admin ? '注册成功，你是第一个用户，已被设为管理员！' : '注册成功，请登录');
+                    switchTab('login');
+                    document.getElementById('loginUsername').value = username;
+                } else {
+                    showErr(data.error || '注册失败');
+                }
+            });
+        }
+
+        // 回车提交
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                if (document.getElementById('formLogin').style.display !== 'none') doLogin();
+                else doRegister();
+            }
+        });
+    </script>
+</body>
+</html>

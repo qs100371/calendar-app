@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# 数据库（用户数据不上传）
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# 环境变量（关键：密钥不要提交）
+.env
+.env.local
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store

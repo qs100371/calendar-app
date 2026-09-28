@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  calendar:
+    image: ghcr.io/your-github-username/calendar-app:latest
+    # 本地构建时启用：
+    # build: .
+    container_name: calendar
+    ports:
+      - "5000:5000"
+    volumes:
+      # 数据持久化到宿主机 ./data
+      - ./data:/app/data
+    environment:
+      # ⚠️ 换成你自己的随机字符串！
+      # 生成：python -c "import secrets; print(secrets.token_hex(32))"
+      - SECRET_KEY=REPLACE_WITH_YOUR_RANDOM_SECRET
+      - DATABASE_PATH=/app/data/calendar.db
+    restart: unless-stopped

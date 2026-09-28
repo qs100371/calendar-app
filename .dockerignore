@@ -1,0 +1,41 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+venv/
+env/
+.venv/
+ENV/
+
+# 数据库（关键：不要把用户数据打进镜像）
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 文档
+*.md
+LICENSE
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 环境变量（关键：不要把本地 env 打进镜像）
+.env
+.env.local
