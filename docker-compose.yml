@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   calendar:
-    image: ghcr.io/your-github-username/calendar-app:latest
+    image: ghcr.io/qs100371/calendar-app:latest
     # 本地构建时启用：
     # build: .
     container_name: calendar
