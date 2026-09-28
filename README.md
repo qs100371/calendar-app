@@ -18,14 +18,9 @@ python app.py
 \`\`\`
 
 ### Docker 运行
-\`\`\`bash
-cp .env.example .env
-# 修改 .env 中的 SECRET_KEY
+
+# 修改 docker-compose.yml 中的 SECRET_KEY
+python -c "import secrets; print(secrets.token_hex(32))"
+粘贴进docker-compose.yml
 docker compose up -d
 \`\`\`
-
-## 环境变量
-| 变量 | 说明 | 默认值 |
-|---|---|---|
-| SECRET_KEY | Flask 会话密钥（必须设置） | dev-secret-key-change-me |
-| DATABASE_PATH | SQLite 数据库路径 | calendar.db |
