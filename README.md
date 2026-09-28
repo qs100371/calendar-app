@@ -12,17 +12,17 @@
 ## 快速开始
 
 ### 本地运行
-\`\`\`bash
+```bash
 pip install -r requirements.txt
 python app.py
-\`\`\`
+```
 
 ### Docker 运行
 
 修改 docker-compose.yml中的 SECRET_KEY
-python -c "import secrets; print(secrets.token_hex(32))"
+`python -c "import secrets; print(secrets.token_hex(32))"`
 生成的字符串粘贴到SECRET_KEY，不要引号
 
-\`\`\`
+```bash
 docker compose up -d
-\`\`\`
+```
