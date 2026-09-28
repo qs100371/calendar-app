@@ -1,24 +1,28 @@
-FROM python:3.11-slim
+# 1. 使用官方 Python 镜像
+FROM python:3.10-slim
 
+# 2. 安装 cron 和时区数据
+RUN apt-get update && apt-get install -y cron tzdata && rm -rf /var/lib/apt/lists/*
+
+# 3. 设置时区为北京时间
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 4. 设置工作目录并复制代码
 WORKDIR /app
-
-# 先装依赖（利用缓存层）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# 复制代码
 COPY . .
 
-# 数据卷，持久化 SQLite 数据
-VOLUME ["/app/data"]
+# 5. 配置 crontab (Debian/Ubuntu 系统路径是 /etc/cron.d/)
+# 假设你的提醒脚本是 /app/notify.py，并且你想每天 20:00 执行
+RUN echo "0 20 * * * root /usr/local/bin/python /app/notify.py >> /proc/1/fd/1 2>&1" > /etc/cron.d/my-cron
+RUN chmod 0644 /etc/cron.d/my-cron
 
-# 默认数据库路径（会被 docker-compose 的 env 覆盖）
-ENV DATABASE_PATH=/app/data/calendar.db
+# 6. 复制启动脚本并赋予权限
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# SECRET_KEY 仅占位，请通过运行时环境变量传入真实值
-# 生成方式：python -c "import secrets; print(secrets.token_hex(32))"
-ENV SECRET_KEY=please-override-me-in-runtime
-
-EXPOSE 5000
-
+# 7. 使用 entrypoint.sh 启动
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "app.py"]
