@@ -161,33 +161,41 @@ def admin_required(f):
 
 # ==================== 多渠道发送 ====================
 def send_via_channel(channel, cfg, title, content):
+    """统一发送入口，失败静默处理"""
     if not cfg:
         return
     try:
         if channel == 'wechat':
+            # 企业微信机器人
             requests.post(cfg,
                           json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'dingtalk':
+            # 钉钉机器人（使用"自定义关键词"模式，关键词包含"提醒"）
             requests.post(cfg,
                           json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'feishu':
+            # 飞书机器人
             requests.post(cfg,
                           json={"msg_type": "text", "content": {"text": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'bark':
+            # Bark（iOS）：cfg 形如 https://api.day.app/xxxxx
             base = cfg.rstrip('/')
             requests.post(base,
                           json={"title": title, "body": content, "level": "timeSensitive"},
                           timeout=5)
         elif channel == 'ntfy':
+            # ntfy（Android）：HTTP Header 不支持中文，把 title 拼进 body
+            full_text = f"{title}\n{content}"
             requests.post(f"https://ntfy.sh/{cfg}",
-                          data=content.encode('utf-8'),
-                          headers={"Title": title, "Priority": "high"}, timeout=5)
+                          data=full_text.encode('utf-8'),
+                          headers={"Priority": "high", "Tags": "bell"},
+                          timeout=5)
         print(f"[{channel}] 通知已发送: {title}")
     except Exception as e:
-        print(f"[{channel}] 发送失败: {e}")
+        print(f"[{channel}] 发送失败: {type(e).__name__}: {e}")
 
 def get_user_channels(uid):
     return {
@@ -207,11 +215,10 @@ def broadcast(uid, title, content):
 def check_reminders():
     """
     每分钟检查一次：
-    1. 普通日程/待办：如果 reminder_time == 当前分钟，提醒（已有逻辑，按事件自带的 time）
-       - 待办：提醒时如果 is_done=1，跳过
-    2. 打卡 / 待办：每天在用户设置的多个时间点提醒（默认 09:00,15:00）
-       - 打卡：当天已打卡，跳过
-       - 待办：提醒时如果 is_done=1，跳过
+    A. 普通日程/待办：按事件自带的 reminder_time 提醒
+    B. 待办 / 打卡：每天在用户设置的多个时间点（默认 09:00,15:00）汇总提醒
+       - 打卡：当天已打卡则跳过
+       - 待办：提醒时如果 is_done=1 则跳过
     """
     with app.app_context():
         now = datetime.now()
@@ -219,7 +226,7 @@ def check_reminders():
         current_time = now.strftime('%H:%M')
         db = get_db()
 
-        # ---------- A. 普通日程（含待办）按 reminder_time 提醒 ----------
+        # ---------- A. 按 reminder_time 提醒（排除 habit） ----------
         events = db.execute(
             """SELECT * FROM events 
                WHERE (date = ? OR (start_date <= ? AND end_date >= ?)) 
@@ -237,8 +244,7 @@ def check_reminders():
             content = f"时间：{current_time}\n事项：{e['title']}"
             broadcast(uid, title, content)
 
-        # ---------- B. 待办 / 打卡 每天多次提醒 ----------
-        # 先收集所有用户（有 todo/habit 的）
+        # ---------- B. 待办 / 打卡 每日汇总提醒 ----------
         user_ids = db.execute(
             """SELECT DISTINCT user_id FROM events 
                WHERE user_id IS NOT NULL 
@@ -248,13 +254,11 @@ def check_reminders():
 
         for row in user_ids:
             uid = row['user_id']
-            # 读取用户的提醒时间配置
             times_str = get_setting('todo_remind_times', DEFAULT_TODO_REMIND_TIMES, user_id=uid)
             times = [t.strip() for t in times_str.split(',') if t.strip()]
             if current_time not in times:
                 continue
 
-            # 找到这个用户今天范围内的 todo / habit
             items = db.execute(
                 """SELECT * FROM events 
                    WHERE user_id = ?
@@ -271,7 +275,6 @@ def check_reminders():
                 if item['type'] == 'todo':
                     todo_lines.append(f"• [待办] {item['title']}")
                 elif item['type'] == 'habit':
-                    # 检查当天是否已打卡
                     log = db.execute(
                         "SELECT status FROM habit_logs WHERE event_id = ? AND date = ? AND user_id = ?",
                         (item['id'], current_date, uid)
@@ -516,10 +519,8 @@ def update_event(id):
     if 'is_done' in data:
         is_done = data['is_done']
         db.execute("UPDATE events SET is_done = ? WHERE id = ?", (is_done, id))
-        # 如果是待办被标记完成，删除之后所有日期的这条待办
+        # 待办完成后，删除明天开始的同类型待办
         if is_done and row['type'] == 'todo':
-            today = datetime.now().strftime('%Y-%m-%d')
-            # 从明天开始的所有待办都删除
             tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
             db.execute(
                 "DELETE FROM events WHERE title = ? AND type = 'todo' AND user_id = ? AND start_date >= ? AND id != ?",
@@ -553,13 +554,13 @@ def handle_settings():
         return jsonify({'status': 'success'})
 
     return jsonify({
-        'term_start_date':  get_setting('term_start_date', '',  user_id=uid),
-        'wechat_webhook':   get_setting('wechat_webhook', '',   user_id=uid),
-        'dingtalk_webhook': get_setting('dingtalk_webhook', '', user_id=uid),
-        'feishu_webhook':   get_setting('feishu_webhook', '',   user_id=uid),
-        'bark_url':         get_setting('bark_url', '',         user_id=uid),
-        'ntfy_topic':       get_setting('ntfy_topic', '',       user_id=uid),
-        'theme':            get_setting('theme', 'dark',        user_id=uid),
+        'term_start_date':   get_setting('term_start_date', '',  user_id=uid),
+        'wechat_webhook':    get_setting('wechat_webhook', '',   user_id=uid),
+        'dingtalk_webhook':  get_setting('dingtalk_webhook', '', user_id=uid),
+        'feishu_webhook':    get_setting('feishu_webhook', '',   user_id=uid),
+        'bark_url':          get_setting('bark_url', '',         user_id=uid),
+        'ntfy_topic':        get_setting('ntfy_topic', '',       user_id=uid),
+        'theme':             get_setting('theme', 'dark',        user_id=uid),
         'todo_remind_times': get_setting('todo_remind_times', DEFAULT_TODO_REMIND_TIMES, user_id=uid),
     })
 
