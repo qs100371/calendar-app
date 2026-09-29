@@ -6,26 +6,34 @@
     <title>日程管理</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="theme-{{ theme }} {% if bg_image %}has-bg{% endif %}"
-      style="{% if bg_image %}--bg-image: url('{{ bg_image }}');{% endif %} --bg-blur: {{ bg_blur or 8 }}px; --bg-overlay: {{ bg_overlay or 0.7 }};">
+<body class="theme-{{ theme }}">
 
     <div class="container">
+        <!-- 左侧日历 -->
         <div class="calendar-section">
             <div class="header-time" id="clock">20:20:05</div>
             <div class="header-date">
-                {{ current_year }}年{{ current_month }}月{{ today.split('-')[2] }}日 {{ today_lunar }}
-                <span style="margin-left:12px; color:var(--text-secondary); font-size:0.85rem;">
+                <span>{{ current_year }}年{{ current_month }}月{{ today.split('-')[2] }}日 {{ today_lunar }}</span>
+
+                <!-- 身份标签（点击展开菜单） -->
+                <span class="user-badge" id="userBadge" onclick="toggleUserMenu(event)">
                     👤 {{ username }}{% if is_admin %} · 管理员{% endif %}
                 </span>
+                <div class="user-menu" id="userMenu">
+                    <div class="user-menu-item" onclick="openAccount()">👤 我的账号</div>
+                    {% if is_admin %}
+                    <div class="user-menu-divider"></div>
+                    <div class="user-menu-item" onclick="openUsers()">👥 用户管理</div>
+                    {% endif %}
+                    <div class="user-menu-divider"></div>
+                    <div class="user-menu-item" onclick="location.href='/logout'">🚪 退出登录</div>
+                </div>
             </div>
 
             <div class="calendar-controls">
-                <div class="month-title">{{ current_year }}年{{ current_month }}月</div>
+                <!-- 只显示月份，不带年份 -->
+                <div class="month-title">{{ current_month }}月</div>
                 <div class="nav-buttons">
-                    <button onclick="openAccount()" title="我的账号">👤</button>
-                    {% if is_admin %}
-                    <button onclick="openUsers()" title="用户管理">👥</button>
-                    {% endif %}
                     <button onclick="openSettings()" title="设置">⚙️</button>
                     <button onclick="changeMonth(-1)" title="上一月">‹</button>
                     <button onclick="changeMonth(1)" title="下一月">›</button>
@@ -66,6 +74,7 @@
             </div>
         </div>
 
+        <!-- 右侧日程 -->
         <div class="schedule-section" id="scheduleSection">
             <div class="schedule-header" id="selectedDateTitle">
                 今天 {{ current_month }}月{{ today.split('-')[2] }}日
@@ -112,25 +121,27 @@
                 <div class="theme-option purple" data-theme="purple" onclick="selectTheme('purple')">优雅紫罗兰</div>
             </div>
 
-            <label>背景图片 URL（可选）：</label>
-            <input type="text" id="bgImageInput" placeholder="https://example.com/bg.jpg">
-            <p class="modal-tip">填入图片地址后，将作为全局背景。</p>
-
-            <label>背景模糊强度：<span id="blurValue">8</span> px</label>
-            <input type="range" id="bgBlurInput" min="0" max="30" step="1" value="8"
-                   oninput="document.getElementById('blurValue').textContent=this.value">
-
-            <label>背景遮罩不透明度：<span id="overlayValue">0.70</span></label>
-            <input type="range" id="bgOverlayInput" min="0" max="1" step="0.05" value="0.7"
-                   oninput="document.getElementById('overlayValue').textContent=parseFloat(this.value).toFixed(2)">
-
             <label>学年第一天（开学日）：</label>
             <input type="date" id="termStartInput">
             <p class="modal-tip">设置后日历显示学年周数。留空则显示自然周数。</p>
 
-            <label>企业微信 Webhook 地址：</label>
-            <input type="text" id="webhookInput" placeholder="https://qyapi.weixin.qq.com/...">
-            <p class="modal-tip">用于接收日程提醒。留空则不发送。</p>
+            <label>📱 提醒渠道（可多选，填了就发）：</label>
+
+            <label style="margin-top:8px; font-size:0.85rem;">企业微信 Webhook</label>
+            <input type="text" id="wechatInput" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
+
+            <label style="margin-top:8px; font-size:0.85rem;">钉钉机器人 Webhook</label>
+            <input type="text" id="dingtalkInput" placeholder="https://oapi.dingtalk.com/robot/send?access_token=...">
+
+            <label style="margin-top:8px; font-size:0.85rem;">飞书机器人 Webhook</label>
+            <input type="text" id="feishuInput" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
+
+            <label style="margin-top:8px; font-size:0.85rem;">Bark（iOS 推送 URL）</label>
+            <input type="text" id="barkInput" placeholder="https://api.day.app/你的KEY">
+
+            <label style="margin-top:8px; font-size:0.85rem;">ntfy Topic（Android 推送）</label>
+            <input type="text" id="ntfyInput" placeholder="例如：rili-qs100371-2026">
+            <p class="modal-tip">Android 装 ntfy App 并订阅同名 topic 即可接收。</p>
 
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeSettings()">取消</button>
@@ -165,7 +176,8 @@
         </div>
     </div>
 
-    <!-- ============ 用户管理弹窗（仅管理员） ============ -->
+    <!-- ============ 用户管理弹窗（管理员） ============ -->
+    {% if is_admin %}
     <div class="modal-overlay" id="usersModal">
         <div class="modal-content" style="width:560px;">
             <h3>用户管理</h3>
@@ -176,6 +188,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <script>
         let currentSelectedDate = "{{ today }}";
@@ -185,23 +198,32 @@
         const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
         const MY_USERNAME = "{{ username }}";
 
-        // ==================== 时钟 ====================
+        // 时钟
         function updateClock() {
-            document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            document.getElementById('clock').textContent =
+                new Date().toLocaleTimeString('zh-CN', { hour12: false });
         }
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ==================== 月份导航 ====================
+        // 月份导航
         function changeMonth(delta) {
-            let newMonth = currentMonth + delta;
-            let newYear = currentYear;
-            if (newMonth > 12) { newMonth = 1; newYear++; }
-            if (newMonth < 1) { newMonth = 12; newYear--; }
-            window.location.href = `/?year=${newYear}&month=${newMonth}`;
+            let m = currentMonth + delta, y = currentYear;
+            if (m > 12) { m = 1; y++; }
+            if (m < 1) { m = 12; y--; }
+            window.location.href = `/?year=${y}&month=${m}`;
         }
 
-        // ==================== 日期选择 ====================
+        // 用户菜单
+        function toggleUserMenu(e) {
+            e.stopPropagation();
+            document.getElementById('userMenu').classList.toggle('show');
+        }
+        document.addEventListener('click', () => {
+            document.getElementById('userMenu').classList.remove('show');
+        });
+
+        // 日期选择
         function selectDate(dateStr) {
             currentSelectedDate = dateStr;
             document.querySelectorAll('.day').forEach(el => el.classList.remove('selected'));
@@ -214,9 +236,9 @@
         }
 
         function onTypeChange() {
-            const type = document.getElementById('eventType').value;
+            const t = document.getElementById('eventType').value;
             const adv = document.getElementById('advancedOptions');
-            if (type === 'event') {
+            if (t === 'event') {
                 adv.classList.remove('show');
             } else {
                 adv.classList.add('show');
@@ -227,10 +249,10 @@
             }
         }
 
-        // ==================== 事件 ====================
+        // 事件
         function loadEvents(dateStr) {
             fetch(`/api/events?date=${dateStr}`)
-                .then(res => res.json())
+                .then(r => r.json())
                 .then(data => {
                     const list = document.getElementById('eventList');
                     list.innerHTML = '';
@@ -248,9 +270,9 @@
 
                         let actionHtml = '';
                         if (event.type === 'habit') {
-                            const isChecked = event.habit_done ? 'checked' : '';
+                            const checked = event.habit_done ? 'checked' : '';
                             actionHtml = `<label style="display:flex;align-items:center;cursor:pointer;color:#4caf50;gap:4px;font-size:0.85rem;">
-                                <input type="checkbox" ${isChecked}
+                                <input type="checkbox" ${checked}
                                     onchange="toggleHabit(${event.id}, this.checked, '${dateStr}')">打卡
                             </label>`;
                         } else {
@@ -292,7 +314,6 @@
                 if (start > end) { alert('起始日期不能晚于结束日期'); return; }
             }
             if (!title) return;
-
             fetch('/api/events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -316,15 +337,13 @@
                 body: JSON.stringify({ is_done: isDone ? 0 : 1 })
             }).then(() => loadEvents(currentSelectedDate));
         }
-
-        function toggleHabit(id, isChecked, dateStr) {
+        function toggleHabit(id, checked, dateStr) {
             fetch(`/api/events/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ habit_status: isChecked ? 1 : 0, date: dateStr })
+                body: JSON.stringify({ habit_status: checked ? 1 : 0, date: dateStr })
             }).then(() => loadEvents(dateStr));
         }
-
         function deleteEvent(id) {
             if (!confirm('确定删除吗？')) return;
             fetch(`/api/events/${id}`, { method: 'DELETE' })
@@ -334,95 +353,83 @@
                 });
         }
 
-        // ==================== 设置弹窗 ====================
+        // 设置弹窗
         function openSettings() {
             fetch('/api/settings').then(r => r.json()).then(data => {
                 document.getElementById('termStartInput').value = data.term_start_date || '';
-                document.getElementById('webhookInput').value = data.wechat_webhook || '';
-                document.getElementById('bgImageInput').value = data.bg_image || '';
-                const blur = parseInt(data.bg_blur || '8');
-                const overlay = parseFloat(data.bg_overlay || '0.7');
-                document.getElementById('bgBlurInput').value = blur;
-                document.getElementById('blurValue').textContent = blur;
-                document.getElementById('bgOverlayInput').value = overlay;
-                document.getElementById('overlayValue').textContent = overlay.toFixed(2);
+                document.getElementById('wechatInput').value   = data.wechat_webhook   || '';
+                document.getElementById('dingtalkInput').value = data.dingtalk_webhook || '';
+                document.getElementById('feishuInput').value   = data.feishu_webhook   || '';
+                document.getElementById('barkInput').value     = data.bark_url         || '';
+                document.getElementById('ntfyInput').value     = data.ntfy_topic       || '';
                 selectedTheme = data.theme || 'dark';
                 updateThemeUI(selectedTheme);
                 document.getElementById('settingsModal').classList.add('active');
             });
         }
         function closeSettings() { document.getElementById('settingsModal').classList.remove('active'); }
-
-        function selectTheme(theme) {
-            selectedTheme = theme;
-            updateThemeUI(theme);
-            document.body.className = `theme-${theme}` +
-                (document.body.classList.contains('has-bg') ? ' has-bg' : '');
+        function selectTheme(t) {
+            selectedTheme = t;
+            updateThemeUI(t);
+            document.body.className = `theme-${t}`;
         }
-        function updateThemeUI(theme) {
-            document.querySelectorAll('.theme-option').forEach(el => {
-                el.classList.toggle('active', el.dataset.theme === theme);
-            });
+        function updateThemeUI(t) {
+            document.querySelectorAll('.theme-option').forEach(el =>
+                el.classList.toggle('active', el.dataset.theme === t));
         }
         function saveSettings() {
             fetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    term_start_date: document.getElementById('termStartInput').value,
-                    wechat_webhook: document.getElementById('webhookInput').value,
-                    theme: selectedTheme,
-                    bg_image: document.getElementById('bgImageInput').value,
-                    bg_blur: document.getElementById('bgBlurInput').value,
-                    bg_overlay: document.getElementById('bgOverlayInput').value
+                    term_start_date:  document.getElementById('termStartInput').value,
+                    theme:            selectedTheme,
+                    wechat_webhook:   document.getElementById('wechatInput').value,
+                    dingtalk_webhook: document.getElementById('dingtalkInput').value,
+                    feishu_webhook:   document.getElementById('feishuInput').value,
+                    bark_url:         document.getElementById('barkInput').value,
+                    ntfy_topic:       document.getElementById('ntfyInput').value,
                 })
             }).then(() => { closeSettings(); window.location.reload(); });
         }
 
-        // ==================== 我的账号 ====================
+        // 我的账号
         function openAccount() { document.getElementById('accountModal').classList.add('active'); }
         function closeAccount() { document.getElementById('accountModal').classList.remove('active'); }
-
         function changeMyPassword() {
-            const oldPwd = document.getElementById('oldPwdInput').value;
-            const newPwd = document.getElementById('newPwdInput').value;
-            if (!oldPwd || !newPwd) { alert('请填写完整'); return; }
+            const o = document.getElementById('oldPwdInput').value;
+            const n = document.getElementById('newPwdInput').value;
+            if (!o || !n) { alert('请填写完整'); return; }
             fetch('/api/me/password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ old_password: oldPwd, new_password: newPwd })
-            }).then(r => r.json()).then(data => {
-                if (data.status === 'ok') {
+                body: JSON.stringify({ old_password: o, new_password: n })
+            }).then(r => r.json()).then(d => {
+                if (d.status === 'ok') {
                     alert('密码修改成功，请重新登录');
                     window.location.href = '/logout';
-                } else {
-                    alert(data.error || '修改失败');
-                }
+                } else alert(d.error || '修改失败');
             });
         }
-
         function deleteMyAccount() {
             if (!confirm('确定要删除你的账号吗？所有数据将永久丢失！')) return;
             if (!confirm('再次确认：此操作不可恢复！')) return;
             fetch('/api/me', { method: 'DELETE' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'ok') {
+                .then(r => r.json()).then(d => {
+                    if (d.status === 'ok') {
                         alert('账号已删除');
                         window.location.href = '/login';
-                    } else {
-                        alert(data.error || '删除失败');
-                    }
+                    } else alert(d.error || '删除失败');
                 });
         }
 
-        // ==================== 用户管理（管理员） ====================
+        // 用户管理（管理员）
         function openUsers() {
+            if (!IS_ADMIN) return;
             document.getElementById('usersModal').classList.add('active');
             refreshUsers();
         }
         function closeUsers() { document.getElementById('usersModal').classList.remove('active'); }
-
         function refreshUsers() {
             fetch('/api/admin/users').then(r => r.json()).then(users => {
                 const box = document.getElementById('userList');
@@ -430,21 +437,21 @@
                 users.forEach(u => {
                     const isMe = u.username === MY_USERNAME;
                     const row = document.createElement('div');
-                    row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px; background:var(--item-bg); border-radius:4px; margin-bottom:6px;';
+                    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--item-bg);border-radius:4px;margin-bottom:6px;';
                     row.innerHTML = `
                         <div>
                             <b>${u.username}</b>
-                            ${u.is_admin ? '<span style="font-size:0.7rem; background:#0078d4; color:#fff; padding:1px 5px; border-radius:3px; margin-left:6px;">管理员</span>' : ''}
-                            ${isMe ? '<span style="font-size:0.7rem; color:#4caf50; margin-left:6px;">(我)</span>' : ''}
-                            <div style="font-size:0.7rem; color:#888; margin-top:2px;">创建于 ${u.created_at ? u.created_at.slice(0, 10) : '未知'}</div>
+                            ${u.is_admin ? '<span style="font-size:0.7rem;background:#0078d4;color:#fff;padding:1px 5px;border-radius:3px;margin-left:6px;">管理员</span>' : ''}
+                            ${isMe ? '<span style="font-size:0.7rem;color:#4caf50;margin-left:6px;">(我)</span>' : ''}
+                            <div style="font-size:0.7rem;color:#888;margin-top:2px;">创建于 ${u.created_at ? u.created_at.slice(0,10) : '未知'}</div>
                         </div>
-                        <div style="display:flex; gap:6px;">
-                            <button style="background:#555; border:none; color:#fff; padding:4px 10px; border-radius:3px; cursor:pointer; font-size:0.8rem;"
+                        <div style="display:flex;gap:6px;">
+                            <button style="background:#555;border:none;color:#fff;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.8rem;"
                                 onclick="adminResetPwd(${u.id})">重置密码</button>
                             ${!isMe ? `
-                                <button style="background:#0078d4; border:none; color:#fff; padding:4px 10px; border-radius:3px; cursor:pointer; font-size:0.8rem;"
+                                <button style="background:#0078d4;border:none;color:#fff;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.8rem;"
                                     onclick="adminToggleAdmin(${u.id})">${u.is_admin ? '取消管理员' : '设为管理员'}</button>
-                                <button style="background:#c0392b; border:none; color:#fff; padding:4px 10px; border-radius:3px; cursor:pointer; font-size:0.8rem;"
+                                <button style="background:#c0392b;border:none;color:#fff;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.8rem;"
                                     onclick="adminDeleteUser(${u.id})">删除</button>
                             ` : ''}
                         </div>`;
@@ -452,44 +459,35 @@
                 });
             });
         }
-
         function adminResetPwd(uid) {
             if (!confirm('重置该用户密码为 123456？')) return;
             fetch(`/api/admin/users/${uid}/reset_password`, { method: 'POST' })
-                .then(r => r.json()).then(data => {
-                    if (data.status === 'ok') alert('已重置为：' + data.new_password);
-                    else alert(data.error);
+                .then(r => r.json()).then(d => {
+                    alert(d.status === 'ok' ? '已重置为：' + d.new_password : d.error);
                 });
         }
         function adminToggleAdmin(uid) {
             fetch(`/api/admin/users/${uid}/toggle_admin`, { method: 'POST' })
-                .then(r => r.json()).then(data => {
-                    if (data.status === 'ok') refreshUsers();
-                    else alert(data.error);
+                .then(r => r.json()).then(d => {
+                    if (d.status === 'ok') refreshUsers(); else alert(d.error);
                 });
         }
         function adminDeleteUser(uid) {
             if (!confirm('删除该用户？其所有日程也将被删除！')) return;
             fetch(`/api/admin/users/${uid}`, { method: 'DELETE' })
-                .then(r => r.json()).then(data => {
-                    if (data.status === 'ok') refreshUsers();
-                    else alert(data.error);
+                .then(r => r.json()).then(d => {
+                    if (d.status === 'ok') refreshUsers(); else alert(d.error);
                 });
         }
 
-        // ==================== 侧边栏 ====================
+        // 侧边栏
         function toggleSidebar() {
-            const section = document.getElementById('scheduleSection');
-            const icon = document.getElementById('toggleIcon');
-            const text = document.getElementById('toggleText');
-            section.classList.toggle('collapsed');
-            if (section.classList.contains('collapsed')) {
-                icon.textContent = '👁️‍🗨️';
-                text.textContent = '显示日程';
-            } else {
-                icon.textContent = '👁️';
-                text.textContent = '隐藏日程';
-            }
+            const s = document.getElementById('scheduleSection');
+            const i = document.getElementById('toggleIcon');
+            const t = document.getElementById('toggleText');
+            s.classList.toggle('collapsed');
+            if (s.classList.contains('collapsed')) { i.textContent = '👁️‍🗨️'; t.textContent = '显示日程'; }
+            else { i.textContent = '👁️'; t.textContent = '隐藏日程'; }
         }
 
         // 点击遮罩关闭
@@ -499,7 +497,7 @@
             });
         });
 
-        // ==================== 初始化 ====================
+        // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             selectDate(currentSelectedDate);
             onTypeChange();

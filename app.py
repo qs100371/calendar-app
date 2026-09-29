@@ -1,6 +1,5 @@
 import sqlite3
 import os
-import sys
 import requests
 from datetime import datetime, timedelta
 from functools import wraps
@@ -12,17 +11,15 @@ import atexit
 
 app = Flask(__name__)
 
-# ==================== SECRET_KEY 配置 ====================
+# ==================== SECRET_KEY ====================
 DEFAULT_SECRET = 'dev-secret-key-change-me-in-production'
 SECRET_KEY = os.environ.get('SECRET_KEY', DEFAULT_SECRET)
 app.secret_key = SECRET_KEY
 
-# 启动时提示
 if SECRET_KEY == DEFAULT_SECRET:
     print("=" * 60)
     print("⚠️  警告：正在使用默认 SECRET_KEY")
-    print("    本地开发可以忽略；部署到公网前请务必设置环境变量 SECRET_KEY")
-    print("    生成方式: python -c \"import secrets; print(secrets.token_hex(32))\"")
+    print("    部署到公网前请务必设置环境变量 SECRET_KEY")
     print("=" * 60)
 else:
     print(f"✅ SECRET_KEY 已从环境变量加载（长度 {len(SECRET_KEY)}）")
@@ -58,7 +55,6 @@ def init_db():
                 created_at TEXT
             )
         ''')
-
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +65,6 @@ def init_db():
                 reminder_time TEXT
             )
         ''')
-
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS habit_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +73,6 @@ def init_db():
                 status INTEGER DEFAULT 1
             )
         ''')
-
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -86,7 +80,7 @@ def init_db():
             )
         ''')
 
-        # 迁移：events
+        # 迁移 events
         cursor.execute("PRAGMA table_info(events)")
         cols = [r[1] for r in cursor.fetchall()]
         if 'user_id' not in cols:
@@ -96,13 +90,13 @@ def init_db():
         if 'end_date' not in cols:
             cursor.execute("ALTER TABLE events ADD COLUMN end_date TEXT")
 
-        # 迁移：habit_logs
+        # 迁移 habit_logs
         cursor.execute("PRAGMA table_info(habit_logs)")
         cols = [r[1] for r in cursor.fetchall()]
         if 'user_id' not in cols:
             cursor.execute("ALTER TABLE habit_logs ADD COLUMN user_id INTEGER")
 
-        # 迁移：settings 表结构（改为按用户）
+        # 迁移 settings（改为按用户）
         cursor.execute("PRAGMA table_info(settings)")
         cols = [r[1] for r in cursor.fetchall()]
         if 'user_id' not in cols:
@@ -162,18 +156,41 @@ def admin_required(f):
         return f(*args, **kwargs)
     return wrapper
 
-# ==================== 企业微信 ====================
-def send_wechat_webhook(user_id, content):
-    url = get_setting('wechat_webhook', '', user_id=user_id)
-    if not url:
-        print(f"[用户{user_id} 未配置 Webhook] {content}")
+# ==================== 多渠道发送 ====================
+def send_via_channel(channel, cfg, title, content):
+    """统一发送入口，失败静默处理"""
+    if not cfg:
         return
     try:
-        requests.post(url, json={"msgtype": "text", "text": {"content": content}},
-                      headers={'Content-Type': 'application/json'}, timeout=5)
-        print(f"[用户{user_id} 通知发送] {content}")
+        if channel == 'wechat':
+            # 企业微信机器人
+            requests.post(cfg,
+                          json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
+                          headers={'Content-Type': 'application/json'}, timeout=5)
+        elif channel == 'dingtalk':
+            # 钉钉机器人（假设用"自定义关键词"模式，非加签）
+            requests.post(cfg,
+                          json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
+                          headers={'Content-Type': 'application/json'}, timeout=5)
+        elif channel == 'feishu':
+            # 飞书机器人
+            requests.post(cfg,
+                          json={"msg_type": "text", "content": {"text": f"{title}\n{content}"}},
+                          headers={'Content-Type': 'application/json'}, timeout=5)
+        elif channel == 'bark':
+            # Bark（iOS），cfg 形如 https://api.day.app/xxxxx
+            base = cfg.rstrip('/')
+            requests.post(base,
+                          json={"title": title, "body": content, "level": "timeSensitive"},
+                          timeout=5)
+        elif channel == 'ntfy':
+            # ntfy（Android），cfg 是 topic 名，走公共实例 ntfy.sh
+            requests.post(f"https://ntfy.sh/{cfg}",
+                          data=content.encode('utf-8'),
+                          headers={"Title": title, "Priority": "high"}, timeout=5)
+        print(f"[{channel}] 通知已发送: {title}")
     except Exception as e:
-        print(f"发送失败: {e}")
+        print(f"[{channel}] 发送失败: {e}")
 
 # ==================== 定时提醒 ====================
 def check_reminders():
@@ -188,9 +205,31 @@ def check_reminders():
                AND reminder_time = ? AND is_done = 0""",
             (current_date, current_date, current_date, current_time)
         ).fetchall()
+
+        cache = {}
+
+        def get_channels(uid):
+            if uid in cache:
+                return cache[uid]
+            cfg = {
+                'wechat':   get_setting('wechat_webhook', '',   user_id=uid),
+                'dingtalk': get_setting('dingtalk_webhook', '', user_id=uid),
+                'feishu':   get_setting('feishu_webhook', '',   user_id=uid),
+                'bark':     get_setting('bark_url', '',         user_id=uid),
+                'ntfy':     get_setting('ntfy_topic', '',       user_id=uid),
+            }
+            cache[uid] = cfg
+            return cfg
+
         for e in events:
-            if e['user_id']:
-                send_wechat_webhook(e['user_id'], f"⏰ 日程提醒\n时间：{current_time}\n事项：{e['title']}")
+            uid = e['user_id']
+            if not uid:
+                continue
+            title = "⏰ 日程提醒"
+            content = f"时间：{current_time}\n事项：{e['title']}"
+            for ch, cfg in get_channels(uid).items():
+                if cfg:
+                    send_via_channel(ch, cfg, title, content)
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_reminders, trigger="interval", minutes=1)
@@ -210,47 +249,47 @@ def generate_calendar(year, month, term_start_date_str=None, start_monday=True, 
     _, days_in_month = calendar.monthrange(year, month)
     days = []
 
-    weekday_of_first = first_day.weekday()
+    wd_first = first_day.weekday()
     if not start_monday:
-        weekday_of_first = (weekday_of_first + 1) % 7
+        wd_first = (wd_first + 1) % 7
 
-    for i in range(weekday_of_first):
-        d = last_month - timedelta(days=weekday_of_first - i - 1)
+    for i in range(wd_first):
+        d = last_month - timedelta(days=wd_first - i - 1)
         days.append({'date': d.strftime('%Y-%m-%d'), 'day': d.day, 'current_month': False})
 
     for i in range(1, days_in_month + 1):
         d = datetime(year, month, i)
         days.append({'date': d.strftime('%Y-%m-%d'), 'day': i, 'current_month': True})
 
-    total_cells = len(days)
-    remainder = total_cells % 7
-    if remainder != 0:
-        for i in range(7 - remainder):
+    total = len(days)
+    rem = total % 7
+    if rem != 0:
+        for i in range(7 - rem):
             d = next_month + timedelta(days=i)
             days.append({'date': d.strftime('%Y-%m-%d'), 'day': d.day, 'current_month': False})
 
     if force_weeks:
-        target_cells = force_weeks * 7
-        if len(days) > target_cells:
-            days = days[:target_cells]
-        elif len(days) < target_cells:
+        target = force_weeks * 7
+        if len(days) > target:
+            days = days[:target]
+        elif len(days) < target:
             last_date = datetime.strptime(days[-1]['date'], '%Y-%m-%d')
-            for i in range(1, target_cells - len(days) + 1):
+            for i in range(1, target - len(days) + 1):
                 d = last_date + timedelta(days=i)
                 days.append({'date': d.strftime('%Y-%m-%d'), 'day': d.day, 'current_month': False})
 
-    term_start_monday = None
+    term_monday = None
     if term_start_date_str:
         try:
             ts = datetime.strptime(term_start_date_str, '%Y-%m-%d')
-            term_start_monday = ts - timedelta(days=ts.weekday())
+            term_monday = ts - timedelta(days=ts.weekday())
         except ValueError:
             pass
 
     for day in days:
         cd = datetime.strptime(day['date'], '%Y-%m-%d')
-        if term_start_monday:
-            dn = (cd - term_start_monday).days
+        if term_monday:
+            dn = (cd - term_monday).days
             wn = dn // 7 + 1
             day['week_label'] = f"第{wn}周" if wn > 0 else ""
         else:
@@ -291,8 +330,7 @@ def register():
         return jsonify({'error': '密码至少 4 位'}), 400
 
     db = get_db()
-    exists = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-    if exists:
+    if db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone():
         return jsonify({'error': '用户名已存在'}), 400
 
     count = db.execute("SELECT COUNT(*) c FROM users").fetchone()['c']
@@ -350,9 +388,6 @@ def index():
                 events_by_date.setdefault(e['date'], []).append(e_dict)
 
     theme = get_setting('theme', 'dark', user_id=uid)
-    bg_image = get_setting('bg_image', '', user_id=uid)
-    bg_blur = get_setting('bg_blur', '8', user_id=uid)
-    bg_overlay = get_setting('bg_overlay', '0.7', user_id=uid)
 
     return render_template('index.html',
                            cal_days=cal_days,
@@ -361,9 +396,6 @@ def index():
                            events_by_date=events_by_date,
                            today=now.strftime('%Y-%m-%d'),
                            theme=theme,
-                           bg_image=bg_image,
-                           bg_blur=bg_blur,
-                           bg_overlay=bg_overlay,
                            username=session.get('username'),
                            is_admin=session.get('is_admin', False),
                            today_lunar="八月十七")
@@ -435,7 +467,7 @@ def update_event(id):
     db.commit()
     return jsonify({'status': 'updated'})
 
-# ==================== 用户设置 API ====================
+# ==================== 设置 API ====================
 @app.route('/api/settings', methods=['GET', 'POST'])
 @login_required
 def handle_settings():
@@ -443,18 +475,20 @@ def handle_settings():
     uid = session['user_id']
     if request.method == 'POST':
         data = request.json
-        for key in ['term_start_date', 'wechat_webhook', 'theme', 'bg_image', 'bg_blur', 'bg_overlay']:
+        for key in ['term_start_date', 'wechat_webhook', 'dingtalk_webhook',
+                    'feishu_webhook', 'bark_url', 'ntfy_topic', 'theme']:
             if key in data:
                 set_setting(key, data[key], user_id=uid)
         return jsonify({'status': 'success'})
 
     return jsonify({
-        'term_start_date': get_setting('term_start_date', '', user_id=uid),
-        'wechat_webhook': get_setting('wechat_webhook', '', user_id=uid),
-        'theme': get_setting('theme', 'dark', user_id=uid),
-        'bg_image': get_setting('bg_image', '', user_id=uid),
-        'bg_blur': get_setting('bg_blur', '8', user_id=uid),
-        'bg_overlay': get_setting('bg_overlay', '0.7', user_id=uid),
+        'term_start_date':  get_setting('term_start_date', '',  user_id=uid),
+        'wechat_webhook':   get_setting('wechat_webhook', '',   user_id=uid),
+        'dingtalk_webhook': get_setting('dingtalk_webhook', '', user_id=uid),
+        'feishu_webhook':   get_setting('feishu_webhook', '',   user_id=uid),
+        'bark_url':         get_setting('bark_url', '',         user_id=uid),
+        'ntfy_topic':       get_setting('ntfy_topic', '',       user_id=uid),
+        'theme':            get_setting('theme', 'dark',        user_id=uid),
     })
 
 # ==================== 我的账号 ====================
@@ -483,8 +517,8 @@ def delete_my_account():
     uid = session['user_id']
     user = db.execute("SELECT is_admin FROM users WHERE id = ?", (uid,)).fetchone()
     if user and user['is_admin']:
-        admin_count = db.execute("SELECT COUNT(*) c FROM users WHERE is_admin = 1").fetchone()['c']
-        if admin_count <= 1:
+        c = db.execute("SELECT COUNT(*) c FROM users WHERE is_admin = 1").fetchone()['c']
+        if c <= 1:
             return jsonify({'error': '你是唯一的管理员，无法删除账号。请先指定另一个管理员。'}), 400
 
     db.execute("DELETE FROM events WHERE user_id = ?", (uid,))
@@ -509,8 +543,7 @@ def admin_list_users():
 @admin_required
 def admin_reset_password(uid):
     db = get_db()
-    user = db.execute("SELECT id FROM users WHERE id = ?", (uid,)).fetchone()
-    if not user:
+    if not db.execute("SELECT id FROM users WHERE id = ?", (uid,)).fetchone():
         return jsonify({'error': '用户不存在'}), 404
     db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
                (generate_password_hash(DEFAULT_PASSWORD), uid))
@@ -541,8 +574,8 @@ def admin_delete_user(uid):
     if not user:
         return jsonify({'error': '用户不存在'}), 404
     if user['is_admin']:
-        admin_count = db.execute("SELECT COUNT(*) c FROM users WHERE is_admin = 1").fetchone()['c']
-        if admin_count <= 1:
+        c = db.execute("SELECT COUNT(*) c FROM users WHERE is_admin = 1").fetchone()['c']
+        if c <= 1:
             return jsonify({'error': '不能删除唯一的管理员'}), 400
     db.execute("DELETE FROM events WHERE user_id = ?", (uid,))
     db.execute("DELETE FROM habit_logs WHERE user_id = ?", (uid,))
@@ -554,5 +587,4 @@ def admin_delete_user(uid):
 # ==================== 启动 ====================
 if __name__ == '__main__':
     init_db()
-    # 默认监听 0.0.0.0，方便局域网/容器访问
     app.run(host='0.0.0.0', debug=False, port=5000)
