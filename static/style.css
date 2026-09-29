@@ -53,8 +53,12 @@ body.theme-purple {
 }
 
 /* ==================== 全局 ==================== */
-* { box-sizing: border-box; margin: 0; padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
 
 body {
     background-color: var(--bg-color);
@@ -64,7 +68,10 @@ body {
     transition: background 0.3s, color 0.3s;
 }
 
-.container { display: flex; height: 100%; }
+.container {
+    display: flex;
+    height: 100%;
+}
 
 .calendar-section {
     flex: 1;
@@ -85,7 +92,10 @@ body {
     transition: all 0.3s ease;
 }
 .schedule-section.collapsed {
-    width: 0; padding: 0; border-left: none; overflow: hidden;
+    width: 0;
+    padding: 0;
+    border-left: none;
+    overflow: hidden;
 }
 
 /* ==================== 头部 ==================== */
@@ -104,37 +114,44 @@ body {
     flex-wrap: wrap;
 }
 
-/* 用户标签（点击展开菜单） */
-.user-badge {
+/* 用户图标 + 下拉菜单 */
+.user-icon-wrapper {
     position: relative;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+    display: inline-block;
+}
+.user-icon {
     cursor: pointer;
-    padding: 2px 8px;
-    border-radius: 12px;
-    background: var(--hover-bg);
+    padding: 4px 8px;
+    border-radius: 50%;
+    font-size: 1.1rem;
     user-select: none;
     transition: background 0.2s;
+    display: inline-block;
+    line-height: 1;
 }
-.user-badge:hover {
-    background: var(--accent-color);
-    color: white;
+.user-icon:hover {
+    background: var(--hover-bg);
 }
 .user-menu {
     display: none;
     position: absolute;
-    top: 100%;
+    top: calc(100% + 6px);
     left: 0;
-    margin-top: 6px;
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    min-width: 160px;
+    min-width: 180px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.4);
     z-index: 100;
     overflow: hidden;
 }
 .user-menu.show { display: block; }
+.user-menu-header {
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: var(--hover-bg);
+}
 .user-menu-item {
     padding: 10px 14px;
     font-size: 0.85rem;
@@ -155,17 +172,26 @@ body {
     align-items: center;
     margin-bottom: 15px;
 }
-.month-title { font-size: 1.5rem; font-weight: 600; }
-.nav-buttons { display: flex; gap: 5px; }
+.month-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+.nav-buttons {
+    display: flex;
+    gap: 5px;
+}
 .nav-buttons button {
-    background: none; border: none;
+    background: none;
+    border: none;
     color: var(--text-main);
     font-size: 1.2rem;
     cursor: pointer;
     padding: 5px 10px;
     border-radius: 4px;
 }
-.nav-buttons button:hover { background-color: var(--hover-bg); }
+.nav-buttons button:hover {
+    background-color: var(--hover-bg);
+}
 
 .calendar-grid {
     display: grid;
@@ -189,9 +215,16 @@ body {
     transition: background 0.2s;
     position: relative;
 }
-.day:hover { background-color: var(--hover-bg); }
-.day.other-month { color: var(--text-secondary); opacity: 0.4; }
-.day.today { border: 1px solid var(--accent-color); }
+.day:hover {
+    background-color: var(--hover-bg);
+}
+.day.other-month {
+    color: var(--text-secondary);
+    opacity: 0.4;
+}
+.day.today {
+    border: 1px solid var(--accent-color);
+}
 .day.selected {
     background-color: var(--accent-color);
     color: white;
@@ -200,6 +233,7 @@ body {
     background: rgba(0,0,0,0.3) !important;
     color: white !important;
 }
+
 .day-number {
     font-size: 1.1rem;
     display: flex;
@@ -214,12 +248,16 @@ body {
     border-radius: 3px;
 }
 .event-dot {
-    width: 6px; height: 6px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     display: inline-block;
 }
 .dot-container {
-    display: flex; gap: 2px; flex-wrap: wrap; margin-top: 4px;
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    margin-top: 4px;
 }
 
 /* ==================== 侧边栏 ==================== */
@@ -229,10 +267,18 @@ body {
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border-color);
 }
+
 .add-event-box {
-    display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 20px;
 }
-.add-row { display: flex; gap: 6px; width: 100%; }
+.add-row {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+}
 .add-event-box input,
 .add-event-box select {
     background: var(--input-bg);
@@ -244,20 +290,35 @@ body {
     flex: 1;
     font-size: 0.9rem;
 }
+.add-event-box input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 .add-event-box button {
     background: var(--accent-color);
-    border: none; color: white;
+    border: none;
+    color: white;
     padding: 0 15px;
     border-radius: 4px;
     cursor: pointer;
     font-weight: bold;
 }
-.add-event-box button:hover { background: var(--accent-hover); }
+.add-event-box button:hover {
+    background: var(--accent-hover);
+}
 
-.advanced-options { display: none; gap: 6px; width: 100%; }
-.advanced-options.show { display: flex; }
+.advanced-options {
+    display: none;
+    gap: 6px;
+    width: 100%;
+}
+.advanced-options.show {
+    display: flex;
+}
 
-.event-list { list-style: none; }
+.event-list {
+    list-style: none;
+}
 .event-item {
     background: var(--item-bg);
     padding: 10px;
@@ -267,7 +328,10 @@ body {
     justify-content: space-between;
     align-items: center;
 }
-.event-item.done { opacity: 0.5; text-decoration: line-through; }
+.event-item.done {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
 .event-item .type-tag {
     font-size: 0.65rem;
     padding: 1px 5px;
@@ -279,16 +343,21 @@ body {
 .type-habit { background: #4caf50; color: white; }
 
 .event-actions button {
-    background: none; border: none;
-    color: #ff6b6b; cursor: pointer;
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
     font-size: 0.8rem;
 }
-.event-actions button.toggle-btn { color: var(--accent-color); }
+.event-actions button.toggle-btn {
+    color: var(--accent-color);
+}
 
 /* ==================== 悬浮按钮 ==================== */
 .floating-toggle-btn {
     position: fixed;
-    bottom: 20px; right: 20px;
+    bottom: 20px;
+    right: 20px;
     background: var(--accent-color);
     color: white;
     border: none;
@@ -298,7 +367,9 @@ body {
     font-size: 0.85rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     z-index: 999;
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     transition: all 0.2s;
 }
 .floating-toggle-btn:hover {
@@ -310,14 +381,18 @@ body {
 .modal-overlay {
     display: none;
     position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(0,0,0,0.7);
     z-index: 1000;
     justify-content: center;
     align-items: center;
 }
-.modal-overlay.active { display: flex; }
+.modal-overlay.active {
+    display: flex;
+}
 
 .modal-content {
     background: var(--card-bg);
@@ -330,7 +405,9 @@ body {
     overflow-y: auto;
     box-shadow: 0 4px 20px rgba(0,0,0,0.6);
 }
-.modal-content h3 { margin-bottom: 15px; }
+.modal-content h3 {
+    margin-bottom: 15px;
+}
 .modal-content label {
     display: block;
     margin-bottom: 5px;
@@ -366,14 +443,18 @@ body {
     border-radius: 6px;
     cursor: pointer;
     border: 2px solid transparent;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 0.7rem;
     color: white;
     transition: all 0.2s;
     text-align: center;
     padding: 2px;
 }
-.theme-option:hover { transform: scale(1.05); }
+.theme-option:hover {
+    transform: scale(1.05);
+}
 .theme-option.active {
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px var(--accent-color);
@@ -402,14 +483,44 @@ body {
 
 /* ==================== 响应式 ==================== */
 @media (max-width: 768px) {
-    .container { flex-direction: column; height: auto; }
-    body { overflow-y: auto; height: auto; }
-    .calendar-section { border-right: none; border-bottom: 1px solid var(--border-color); }
-    .schedule-section { width: 100%; }
-    .schedule-section.collapsed { width: 100%; height: 0; padding: 0; }
-    .day { min-height: 55px; padding: 4px; }
-    .day-number { font-size: 0.9rem; }
-    .week-label { font-size: 0.6rem; padding: 0 2px; }
-    .floating-toggle-btn { bottom: 10px; right: 10px; padding: 8px 14px; font-size: 0.8rem; }
-    .theme-grid { grid-template-columns: repeat(2, 1fr); }
+    .container {
+        flex-direction: column;
+        height: auto;
+    }
+    body {
+        overflow-y: auto;
+        height: auto;
+    }
+    .calendar-section {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .schedule-section {
+        width: 100%;
+    }
+    .schedule-section.collapsed {
+        width: 100%;
+        height: 0;
+        padding: 0;
+    }
+    .day {
+        min-height: 55px;
+        padding: 4px;
+    }
+    .day-number {
+        font-size: 0.9rem;
+    }
+    .week-label {
+        font-size: 0.6rem;
+        padding: 0 2px;
+    }
+    .floating-toggle-btn {
+        bottom: 10px;
+        right: 10px;
+        padding: 8px 14px;
+        font-size: 0.8rem;
+    }
+    .theme-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }

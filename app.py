@@ -27,6 +27,9 @@ else:
 DATABASE = os.environ.get('DATABASE_PATH', 'calendar.db')
 DEFAULT_PASSWORD = '123456'
 
+# 待办/打卡默认提醒时间
+DEFAULT_TODO_REMIND_TIMES = "09:00,15:00"
+
 # ==================== 数据库 ====================
 def get_db():
     db = getattr(g, '_database', None)
@@ -158,33 +161,27 @@ def admin_required(f):
 
 # ==================== 多渠道发送 ====================
 def send_via_channel(channel, cfg, title, content):
-    """统一发送入口，失败静默处理"""
     if not cfg:
         return
     try:
         if channel == 'wechat':
-            # 企业微信机器人
             requests.post(cfg,
                           json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'dingtalk':
-            # 钉钉机器人（假设用"自定义关键词"模式，非加签）
             requests.post(cfg,
                           json={"msgtype": "text", "text": {"content": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'feishu':
-            # 飞书机器人
             requests.post(cfg,
                           json={"msg_type": "text", "content": {"text": f"{title}\n{content}"}},
                           headers={'Content-Type': 'application/json'}, timeout=5)
         elif channel == 'bark':
-            # Bark（iOS），cfg 形如 https://api.day.app/xxxxx
             base = cfg.rstrip('/')
             requests.post(base,
                           json={"title": title, "body": content, "level": "timeSensitive"},
                           timeout=5)
         elif channel == 'ntfy':
-            # ntfy（Android），cfg 是 topic 名，走公共实例 ntfy.sh
             requests.post(f"https://ntfy.sh/{cfg}",
                           data=content.encode('utf-8'),
                           headers={"Title": title, "Priority": "high"}, timeout=5)
@@ -192,34 +189,45 @@ def send_via_channel(channel, cfg, title, content):
     except Exception as e:
         print(f"[{channel}] 发送失败: {e}")
 
+def get_user_channels(uid):
+    return {
+        'wechat':   get_setting('wechat_webhook', '',   user_id=uid),
+        'dingtalk': get_setting('dingtalk_webhook', '', user_id=uid),
+        'feishu':   get_setting('feishu_webhook', '',   user_id=uid),
+        'bark':     get_setting('bark_url', '',         user_id=uid),
+        'ntfy':     get_setting('ntfy_topic', '',       user_id=uid),
+    }
+
+def broadcast(uid, title, content):
+    for ch, cfg in get_user_channels(uid).items():
+        if cfg:
+            send_via_channel(ch, cfg, title, content)
+
 # ==================== 定时提醒 ====================
 def check_reminders():
+    """
+    每分钟检查一次：
+    1. 普通日程/待办：如果 reminder_time == 当前分钟，提醒（已有逻辑，按事件自带的 time）
+       - 待办：提醒时如果 is_done=1，跳过
+    2. 打卡 / 待办：每天在用户设置的多个时间点提醒（默认 09:00,15:00）
+       - 打卡：当天已打卡，跳过
+       - 待办：提醒时如果 is_done=1，跳过
+    """
     with app.app_context():
         now = datetime.now()
         current_date = now.strftime('%Y-%m-%d')
         current_time = now.strftime('%H:%M')
         db = get_db()
+
+        # ---------- A. 普通日程（含待办）按 reminder_time 提醒 ----------
         events = db.execute(
             """SELECT * FROM events 
                WHERE (date = ? OR (start_date <= ? AND end_date >= ?)) 
-               AND reminder_time = ? AND is_done = 0""",
+               AND reminder_time = ? 
+               AND is_done = 0
+               AND type != 'habit'""",
             (current_date, current_date, current_date, current_time)
         ).fetchall()
-
-        cache = {}
-
-        def get_channels(uid):
-            if uid in cache:
-                return cache[uid]
-            cfg = {
-                'wechat':   get_setting('wechat_webhook', '',   user_id=uid),
-                'dingtalk': get_setting('dingtalk_webhook', '', user_id=uid),
-                'feishu':   get_setting('feishu_webhook', '',   user_id=uid),
-                'bark':     get_setting('bark_url', '',         user_id=uid),
-                'ntfy':     get_setting('ntfy_topic', '',       user_id=uid),
-            }
-            cache[uid] = cfg
-            return cfg
 
         for e in events:
             uid = e['user_id']
@@ -227,9 +235,61 @@ def check_reminders():
                 continue
             title = "⏰ 日程提醒"
             content = f"时间：{current_time}\n事项：{e['title']}"
-            for ch, cfg in get_channels(uid).items():
-                if cfg:
-                    send_via_channel(ch, cfg, title, content)
+            broadcast(uid, title, content)
+
+        # ---------- B. 待办 / 打卡 每天多次提醒 ----------
+        # 先收集所有用户（有 todo/habit 的）
+        user_ids = db.execute(
+            """SELECT DISTINCT user_id FROM events 
+               WHERE user_id IS NOT NULL 
+                 AND type IN ('todo', 'habit')
+                 AND is_done = 0"""
+        ).fetchall()
+
+        for row in user_ids:
+            uid = row['user_id']
+            # 读取用户的提醒时间配置
+            times_str = get_setting('todo_remind_times', DEFAULT_TODO_REMIND_TIMES, user_id=uid)
+            times = [t.strip() for t in times_str.split(',') if t.strip()]
+            if current_time not in times:
+                continue
+
+            # 找到这个用户今天范围内的 todo / habit
+            items = db.execute(
+                """SELECT * FROM events 
+                   WHERE user_id = ?
+                     AND type IN ('todo', 'habit')
+                     AND is_done = 0
+                     AND start_date <= ? AND end_date >= ?""",
+                (uid, current_date, current_date)
+            ).fetchall()
+
+            todo_lines = []
+            habit_lines = []
+
+            for item in items:
+                if item['type'] == 'todo':
+                    todo_lines.append(f"• [待办] {item['title']}")
+                elif item['type'] == 'habit':
+                    # 检查当天是否已打卡
+                    log = db.execute(
+                        "SELECT status FROM habit_logs WHERE event_id = ? AND date = ? AND user_id = ?",
+                        (item['id'], current_date, uid)
+                    ).fetchone()
+                    if log and log['status'] == 1:
+                        continue  # 已完成，跳过
+                    habit_lines.append(f"• [打卡] {item['title']}")
+
+            if not todo_lines and not habit_lines:
+                continue
+
+            content = f"时间：{current_time}\n"
+            if todo_lines:
+                content += "今日待办：\n" + "\n".join(todo_lines) + "\n"
+            if habit_lines:
+                content += "今日打卡：\n" + "\n".join(habit_lines)
+
+            broadcast(uid, "📋 每日提醒", content.strip())
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_reminders, trigger="interval", minutes=1)
@@ -442,7 +502,7 @@ def handle_events():
 def update_event(id):
     db = get_db()
     uid = session['user_id']
-    row = db.execute("SELECT user_id FROM events WHERE id = ?", (id,)).fetchone()
+    row = db.execute("SELECT * FROM events WHERE id = ?", (id,)).fetchone()
     if not row or row['user_id'] != uid:
         return jsonify({'error': '无权操作'}), 403
 
@@ -454,7 +514,17 @@ def update_event(id):
 
     data = request.json
     if 'is_done' in data:
-        db.execute("UPDATE events SET is_done = ? WHERE id = ?", (data['is_done'], id))
+        is_done = data['is_done']
+        db.execute("UPDATE events SET is_done = ? WHERE id = ?", (is_done, id))
+        # 如果是待办被标记完成，删除之后所有日期的这条待办
+        if is_done and row['type'] == 'todo':
+            today = datetime.now().strftime('%Y-%m-%d')
+            # 从明天开始的所有待办都删除
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+            db.execute(
+                "DELETE FROM events WHERE title = ? AND type = 'todo' AND user_id = ? AND start_date >= ? AND id != ?",
+                (row['title'], uid, tomorrow, id)
+            )
     elif 'habit_status' in data:
         d = data.get('date')
         st = data.get('habit_status')
@@ -476,7 +546,8 @@ def handle_settings():
     if request.method == 'POST':
         data = request.json
         for key in ['term_start_date', 'wechat_webhook', 'dingtalk_webhook',
-                    'feishu_webhook', 'bark_url', 'ntfy_topic', 'theme']:
+                    'feishu_webhook', 'bark_url', 'ntfy_topic', 'theme',
+                    'todo_remind_times']:
             if key in data:
                 set_setting(key, data[key], user_id=uid)
         return jsonify({'status': 'success'})
@@ -489,6 +560,7 @@ def handle_settings():
         'bark_url':         get_setting('bark_url', '',         user_id=uid),
         'ntfy_topic':       get_setting('ntfy_topic', '',       user_id=uid),
         'theme':            get_setting('theme', 'dark',        user_id=uid),
+        'todo_remind_times': get_setting('todo_remind_times', DEFAULT_TODO_REMIND_TIMES, user_id=uid),
     })
 
 # ==================== 我的账号 ====================

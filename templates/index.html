@@ -15,24 +15,27 @@
             <div class="header-date">
                 <span>{{ current_year }}年{{ current_month }}月{{ today.split('-')[2] }}日 {{ today_lunar }}</span>
 
-                <!-- 身份标签（点击展开菜单） -->
-                <span class="user-badge" id="userBadge" onclick="toggleUserMenu(event)">
-                    👤 {{ username }}{% if is_admin %} · 管理员{% endif %}
+                <!-- 👤 图标单独点击弹出菜单 -->
+                <span class="user-icon-wrapper">
+                    <span class="user-icon" id="userIcon" onclick="toggleUserMenu(event)">👤</span>
+                    <div class="user-menu" id="userMenu">
+                        <div class="user-menu-header">
+                            {{ username }}{% if is_admin %} · 管理员{% endif %}
+                        </div>
+                        <div class="user-menu-divider"></div>
+                        <div class="user-menu-item" onclick="openAccount()">🔑 我的账号</div>
+                        {% if is_admin %}
+                        <div class="user-menu-divider"></div>
+                        <div class="user-menu-item" onclick="openUsers()">👥 用户管理</div>
+                        {% endif %}
+                        <div class="user-menu-divider"></div>
+                        <div class="user-menu-item" onclick="location.href='/logout'">🚪 退出登录</div>
+                    </div>
                 </span>
-                <div class="user-menu" id="userMenu">
-                    <div class="user-menu-item" onclick="openAccount()">👤 我的账号</div>
-                    {% if is_admin %}
-                    <div class="user-menu-divider"></div>
-                    <div class="user-menu-item" onclick="openUsers()">👥 用户管理</div>
-                    {% endif %}
-                    <div class="user-menu-divider"></div>
-                    <div class="user-menu-item" onclick="location.href='/logout'">🚪 退出登录</div>
-                </div>
             </div>
 
             <div class="calendar-controls">
-                <!-- 只显示月份，不带年份 -->
-                <div class="month-title">{{ current_month }}月</div>
+                <div class="month-title">{{ current_year }}年{{ current_month }}月</div>
                 <div class="nav-buttons">
                     <button onclick="openSettings()" title="设置">⚙️</button>
                     <button onclick="changeMonth(-1)" title="上一月">‹</button>
@@ -87,7 +90,7 @@
                         <option value="todo">待办</option>
                         <option value="habit">打卡</option>
                     </select>
-                    <input type="time" id="reminderTime" title="提醒时间（可选）">
+                    <input type="time" id="reminderTime" title="仅日程可单独设置提醒时间">
                 </div>
                 <div class="add-row advanced-options" id="advancedOptions">
                     <input type="date" id="startDate" title="起始日期">
@@ -124,6 +127,10 @@
             <label>学年第一天（开学日）：</label>
             <input type="date" id="termStartInput">
             <p class="modal-tip">设置后日历显示学年周数。留空则显示自然周数。</p>
+
+            <label>每日待办/打卡提醒时间（24 小时制，逗号分隔）：</label>
+            <input type="text" id="todoRemindTimesInput" placeholder="09:00,15:00">
+            <p class="modal-tip">每天在这个时间点提醒未完成的待办和未打卡的项目。默认 09:00,15:00。</p>
 
             <label>📱 提醒渠道（可多选，填了就发）：</label>
 
@@ -238,10 +245,16 @@
         function onTypeChange() {
             const t = document.getElementById('eventType').value;
             const adv = document.getElementById('advancedOptions');
+            const rt = document.getElementById('reminderTime');
             if (t === 'event') {
                 adv.classList.remove('show');
+                rt.disabled = false;
+                rt.title = "日程提醒时间（可选）";
             } else {
                 adv.classList.add('show');
+                rt.value = '';  // 待办/打卡不用单独时间，走每日提醒
+                rt.disabled = true;
+                rt.title = "待办和打卡使用设置中的「每日提醒时间」";
                 if (!document.getElementById('startDate').value) {
                     document.getElementById('startDate').value = currentSelectedDate;
                     document.getElementById('endDate').value = currentSelectedDate;
@@ -335,7 +348,10 @@
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_done: isDone ? 0 : 1 })
-            }).then(() => loadEvents(currentSelectedDate));
+            }).then(() => {
+                loadEvents(currentSelectedDate);
+                setTimeout(() => window.location.reload(), 200);
+            });
         }
         function toggleHabit(id, checked, dateStr) {
             fetch(`/api/events/${id}`, {
@@ -357,6 +373,7 @@
         function openSettings() {
             fetch('/api/settings').then(r => r.json()).then(data => {
                 document.getElementById('termStartInput').value = data.term_start_date || '';
+                document.getElementById('todoRemindTimesInput').value = data.todo_remind_times || '09:00,15:00';
                 document.getElementById('wechatInput').value   = data.wechat_webhook   || '';
                 document.getElementById('dingtalkInput').value = data.dingtalk_webhook || '';
                 document.getElementById('feishuInput').value   = data.feishu_webhook   || '';
@@ -384,6 +401,7 @@
                 body: JSON.stringify({
                     term_start_date:  document.getElementById('termStartInput').value,
                     theme:            selectedTheme,
+                    todo_remind_times: document.getElementById('todoRemindTimesInput').value,
                     wechat_webhook:   document.getElementById('wechatInput').value,
                     dingtalk_webhook: document.getElementById('dingtalkInput').value,
                     feishu_webhook:   document.getElementById('feishuInput').value,
