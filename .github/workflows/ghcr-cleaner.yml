@@ -1,6 +1,20 @@
-- uses: quartx-analytics/ghcr-cleaner@v1
-  with:
-      owner-type: org # or user
-      token: ${{ secrets.PAT_TOKEN }}
-      repository_owner: ${{ github.repository_owner }}
-      delete-untagged: true
+name: Clean GHCR untagged images
+
+on:
+  # 手动触发（方便测试）
+  workflow_dispatch:
+  # 或者定时触发（每周一凌晨跑）
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: quartx-analytics/ghcr-cleaner@v1
+        with:
+          owner-type: user # 如果是个人账号，改成 user
+          token: ${{ secrets.PAT_TOKEN }}
+          repository_owner: ${{ github.repository_owner }}
+          delete-untagged: true
+          dry-run: true   # ⚠️ 首次务必加上，只预览不删除
