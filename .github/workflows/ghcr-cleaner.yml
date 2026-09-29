@@ -15,6 +15,7 @@ jobs:
         with:
           owner-type: user # 如果是个人账号，改成 user
           token: ${{ secrets.PAT_TOKEN }}
-          repository_owner: ${{ github.repository_owner }}
+          repository_owner: ${{ github.repository-owner }}
+          package-name: calendar-app
           delete-untagged: true
-          dry-run: true   # ⚠️ 首次务必加上，只预览不删除
+          dry-run: false   # ⚠️ 首次务必加上，只预览不删除
