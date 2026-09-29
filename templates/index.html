@@ -15,7 +15,6 @@
             <div class="header-date">
                 <span>{{ current_year }}年{{ current_month }}月{{ today.split('-')[2] }}日 {{ today_lunar }}</span>
 
-                <!-- 👤 图标单独点击弹出菜单 -->
                 <span class="user-icon-wrapper">
                     <span class="user-icon" id="userIcon" onclick="toggleUserMenu(event)">👤</span>
                     <div class="user-menu" id="userMenu">
@@ -205,7 +204,6 @@
         const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
         const MY_USERNAME = "{{ username }}";
 
-        // 时钟
         function updateClock() {
             document.getElementById('clock').textContent =
                 new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -213,7 +211,6 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // 月份导航
         function changeMonth(delta) {
             let m = currentMonth + delta, y = currentYear;
             if (m > 12) { m = 1; y++; }
@@ -221,7 +218,6 @@
             window.location.href = `/?year=${y}&month=${m}`;
         }
 
-        // 用户菜单
         function toggleUserMenu(e) {
             e.stopPropagation();
             document.getElementById('userMenu').classList.toggle('show');
@@ -230,7 +226,6 @@
             document.getElementById('userMenu').classList.remove('show');
         });
 
-        // 日期选择
         function selectDate(dateStr) {
             currentSelectedDate = dateStr;
             document.querySelectorAll('.day').forEach(el => el.classList.remove('selected'));
@@ -252,7 +247,7 @@
                 rt.title = "日程提醒时间（可选）";
             } else {
                 adv.classList.add('show');
-                rt.value = '';  // 待办/打卡不用单独时间，走每日提醒
+                rt.value = '';
                 rt.disabled = true;
                 rt.title = "待办和打卡使用设置中的「每日提醒时间」";
                 if (!document.getElementById('startDate').value) {
@@ -262,7 +257,6 @@
             }
         }
 
-        // 事件
         function loadEvents(dateStr) {
             fetch(`/api/events?date=${dateStr}`)
                 .then(r => r.json())
@@ -369,7 +363,6 @@
                 });
         }
 
-        // 设置弹窗
         function openSettings() {
             fetch('/api/settings').then(r => r.json()).then(data => {
                 document.getElementById('termStartInput').value = data.term_start_date || '';
@@ -411,7 +404,6 @@
             }).then(() => { closeSettings(); window.location.reload(); });
         }
 
-        // 我的账号
         function openAccount() { document.getElementById('accountModal').classList.add('active'); }
         function closeAccount() { document.getElementById('accountModal').classList.remove('active'); }
         function changeMyPassword() {
@@ -441,7 +433,6 @@
                 });
         }
 
-        // 用户管理（管理员）
         function openUsers() {
             if (!IS_ADMIN) return;
             document.getElementById('usersModal').classList.add('active');
@@ -498,7 +489,6 @@
                 });
         }
 
-        // 侧边栏
         function toggleSidebar() {
             const s = document.getElementById('scheduleSection');
             const i = document.getElementById('toggleIcon');
@@ -508,14 +498,12 @@
             else { i.textContent = '👁️'; t.textContent = '隐藏日程'; }
         }
 
-        // 点击遮罩关闭
         document.querySelectorAll('.modal-overlay').forEach(el => {
             el.addEventListener('click', e => {
                 if (e.target === el) el.classList.remove('active');
             });
         });
 
-        // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             selectDate(currentSelectedDate);
             onTypeChange();
