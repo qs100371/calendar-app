@@ -22,10 +22,11 @@
 ```bash
 pip install -r requirements.txt
 python app.py
+```
 打开浏览器访问 http://localhost:5000
 
 方式二：Docker 运行
-bash
+```bash
 docker run -d \
   --name calendar \
   -p 8000:5000 \
@@ -34,12 +35,13 @@ docker run -d \
   -e DATABASE_PATH=/app/data/calendar.db \
   --restart unless-stopped \
   ghcr.io/qs100371/calendar-app:latest
+```
 访问 http://localhost:8000
 
 方式三：Docker Compose
 docker-compose.yml：
 
-yaml
+```yaml
 services:
   calendar:
     image: ghcr.io/qs100371/calendar-app:latest
@@ -52,16 +54,19 @@ services:
       - SECRET_KEY=你的随机密钥
       - DATABASE_PATH=/app/data/calendar.db
     restart: unless-stopped
-bash
+```
+```bash
 docker compose up -d
+```
 🔧 环境变量
 变量名	说明	默认值
 SECRET_KEY	Flask 会话密钥（部署必填）	dev-secret-key-change-me-in-production
 DATABASE_PATH	SQLite 数据库文件路径	calendar.db
 生成随机密钥：
 
-bash
+```bash
 python -c "import secrets; print(secrets.token_hex(32))"
+```
 ⚠️ 部署到公网前必须设置 SECRET_KEY，否则任何人都能伪造登录状态。
 ⚠️ SECRET_KEY 一旦上线不要随意更换，否则所有用户会被强制登出。
 
@@ -110,8 +115,9 @@ iPhone 上从 App Store 安装 Bark App
 
 打开 App，在订阅框输入一个只有你自己知道的 topic 名字，例如：
 
-text
-rili-qs100371-2026
+```text
+rili-123456-2026
+```
 点击订阅。
 
 在设置的「ntfy Topic」输入框中填入同样的 topic 名（注意：只填名字，不填完整 URL）
@@ -140,18 +146,21 @@ Android 用户 → ntfy（最省事）
 
 Docker 部署时务必挂载数据卷：
 
-yaml
+```yaml
 volumes:
   - ./data:/app/data
+```
 备份：整个应用的所有数据都在一个 .db 文件里，直接复制即可：
 
-bash
+```bash
 cp ./data/calendar.db ~/backup/calendar-$(date +%Y%m%d).db
+```
 恢复：
 
-bash
+```bash
 cp ~/backup/calendar-20260929.db ./data/calendar.db
 docker compose restart
+```
 👤 用户与权限
 第一个注册的用户自动成为管理员
 
@@ -219,43 +228,19 @@ calendar-app/
 ├── .dockerignore
 ├── .gitignore
 └── README.md
-🐳 镜像构建
-推送到 GitHub 的 main 分支后，GitHub Actions 会自动：
+## 功能位置速查
 
-构建 Docker 镜像
-
-推送到 GitHub Container Registry
-
-镜像地址：
-
-text
-ghcr.io/qs100371/calendar-app:latest
-手动拉取（如果镜像是私有的，需要先登录）：
-
-bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u qs100371 --password-stdin
-docker pull ghcr.io/qs100371/calendar-app:latest
-公开镜像（让任何人都能拉取）：
-GitHub → 你的头像 → Packages → calendar-app → Package settings → Change visibility → Public
-
+| 功能 | 位置 |
+|---|---|
+| 单次日程提醒时间 | 右侧输入栏的 ⏰ 时间框 |
+| 待办/打卡的每日提醒时间 | ⚙️ 设置 → 每日待办/打卡提醒时间 |
+| 提醒渠道配置 | ⚙️ 设置 → 各渠道 Webhook |
+| 主题皮肤 | ⚙️ 设置 → 主题皮肤 |
+| 学年周数 | ⚙️ 设置 → 学年第一天 |
+| 用户管理 | 点击时间行后的 👤 图标 |
+| 我的账号 | 点击时间行后的 👤 图标 |
 📄 License
 MIT
 
-text
-
----
-
-## 主要新增的内容
-
-相比之前的 README，这次加上了：
-
-1. **✅ 功能特性**：明确列出 5 种提醒渠道
-2. **🔔 提醒渠道配置**：**5 种渠道的详细步骤**（这是你要的重点）
-   - 每种渠道都写了"从哪拿配置"、"填到哪"
-   - 钉钉特别注意：必须用"自定义关键词"而不是"加签"
-   - ntfy 特别注意：**只填 topic 名，不填 URL**
-3. **📱 提醒渠道对比表**：帮用户快速选择
-4. **🎨 主题皮肤说明**
-5. **📁 数据持久化 + 备份恢复**
 
 ---
